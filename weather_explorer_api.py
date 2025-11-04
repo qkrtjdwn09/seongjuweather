@@ -1,29 +1,33 @@
 import streamlit as st
 import requests
+import folium
+from streamlit_folium import st_folium
 from datetime import datetime, timedelta
 
-st.set_page_config(page_title="Seongju Weather", page_icon="🌤️", layout="centered")
+st.set_page_config(page_title="🇰🇷 Korea Weather Explorer", page_icon="🌦️", layout="wide")
 
-st.title("🌤️ Seongju Weather Explorer")
-st.caption("Powered by Open-Meteo API")
+st.title("🇰🇷 Korea Weather Explorer")
+st.caption("Interactive temperature map using Open-Meteo API — click anywhere in Korea!")
 
 # --------------------------
-# User input
+# Default Map
 # --------------------------
-city = st.text_input("Enter a city:", "Seoul")
+center_lat, center_lon = 36.5, 127.8  # Korea center
 
-# City coordinates (we’ll map a few common ones)
-cities = {
-    "Seoul": (37.5665, 126.9780),
-    "Busan": (35.1796, 129.0756),
-    "Daegu": (35.8714, 128.6014),
-    "Jeju": (33.4996, 126.5312)
-}
+m = folium.Map(location=[center_lat, center_lon], zoom_start=7)
 
-if city not in cities:
-    st.warning("City not recognized. Try: Seoul, Busan, Daegu, or Jeju.")
-else:
-    lat, lon = cities[city]
+# Let user click
+st.write("🗺️ Click on any location in Korea to get yesterday, today, and tomorrow’s high/low temperatures.")
+map_data = st_folium(m, height=500, width=900)
+
+# --------------------------
+# If user clicked on the map
+# --------------------------
+if map_data and map_data["last_clicked"]:
+    lat = map_data["last_clicked"]["lat"]
+    lon = map_data["last_clicked"]["lng"]
+
+    st.success(f"📍 Selected Location: ({lat:.3f}, {lon:.3f})")
 
     # --------------------------
     # Dates
@@ -33,7 +37,7 @@ else:
     tomorrow = today + timedelta(days=1)
 
     # --------------------------
-    # Fetch data from Open-Meteo
+    # Function to get data
     # --------------------------
     def get_weather_data(base_url, start_date, end_date):
         params = {
@@ -44,28 +48,33 @@ else:
             "daily": "temperature_2m_max,temperature_2m_min",
             "timezone": "auto"
         }
-        response = requests.get(base_url, params=params)
-        if response.status_code == 200:
-            return response.json()
+        r = requests.get(base_url, params=params)
+        if r.status_code == 200:
+            return r.json()
         else:
-            st.error("Failed to fetch data.")
+            st.error(f"❌ Failed to fetch data from {base_url}")
             return None
 
-    # Fetch each
+    # --------------------------
+    # Fetch Data
+    # --------------------------
     yesterday_data = get_weather_data("https://archive-api.open-meteo.com/v1/archive", yesterday, yesterday)
     today_data = get_weather_data("https://api.open-meteo.com/v1/forecast", today, today)
     tomorrow_data = get_weather_data("https://api.open-meteo.com/v1/forecast", tomorrow, tomorrow)
 
     # --------------------------
-    # Display
+    # Display Metrics
     # --------------------------
     def display_day(label, data):
-        if data:
-            temp_max = data["daily"]["temperature_2m_max"][0]
-            temp_min = data["daily"]["temperature_2m_min"][0]
-            st.metric(label=label, value=f"🌡️ High: {temp_max}°C", delta=f"Low: {temp_min}°C")
+        if data and "daily" in data:
+            tmax = data["daily"]["temperature_2m_max"][0]
+            tmin = data["daily"]["temperature_2m_min"][0]
+            st.metric(label, f"High {tmax}°C", f"Low {tmin}°C")
+        else:
+            st.write(f"{label}: Data not available")
 
-    st.subheader(f"Weather in {city}")
+    st.subheader("🌡️ Temperature Overview")
+
     col1, col2, col3 = st.columns(3)
     with col1:
         display_day("Yesterday", yesterday_data)
@@ -73,3 +82,5 @@ else:
         display_day("Today", today_data)
     with col3:
         display_day("Tomorrow", tomorrow_data)
+else:
+    st.info("Click on the map to fetch weather data.")
